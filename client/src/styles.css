@@ -1,0 +1,100 @@
+:root {
+    --accent: #2d8cff;
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --muted: #6b7280;
+}
+
+body {
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: linear-gradient(180deg, #eef3ff 0%, #f8fafc 100%);
+    margin: 0;
+    padding: 0;
+}
+
+.app {
+    max-width: 1000px;
+    margin: 28px auto;
+    padding: 12px;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.topbar h1 {
+    margin: 0;
+    font-size: 20px;
+    color: #0f172a;
+}
+
+.name-input {
+    margin-left: 8px;
+    padding: 6px 8px;
+}
+
+.main-panel {
+    background: var(--panel);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    padding: 12px;
+}
+
+.toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eef2ff;
+}
+
+.button {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: #fff;
+    cursor: pointer;
+}
+
+.button:hover {
+    border-color: #e6edf7;
+}
+
+.select {
+    padding: 6px;
+}
+
+.editor-area {
+    min-height: 300px;
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 6px;
+    background: #fff;
+    border: 1px solid #e6eef8;
+    outline: none;
+}
+
+.meta-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-top: 8px;
+    color: var(--muted);
+}
+
+.history {
+    margin-top: 12px;
+    max-height: 140px;
+    overflow: auto;
+    border-top: 1px dashed #eef2ff;
+    padding-top: 8px;
+}
+
+.version-item {
+    font-size: 13px;
+    padding: 6px 0;
+    border-bottom: 1px solid #fbfdff;
+}
