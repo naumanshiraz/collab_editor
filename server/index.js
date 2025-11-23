@@ -6,7 +6,7 @@ const cors = require('cors');
 
 require('dotenv').config();
 
-const Document = require('.models/Document');
+const Document = require('./models/Document');
 
 const app = express();
 app.use(cors());
