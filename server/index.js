@@ -23,3 +23,22 @@ const PORT = process.env.PORT || 4000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/collab-editor';
 const DOC_ID = process.env.DOC_ID || 'shared-doc';
 
+app.get('/', (req, res) => res.send('Editor server running'));
+
+app.get('/doc/:docId', async (req, res) => {
+    try {
+        const doc = await Document.findOne({
+            docId: req.params.docId
+        });
+
+        if(!doc) {
+            return res.status(404).json({
+                error: 'Document not found'
+            });
+        }
+    } catch (err) {
+        res.status(500).json({
+            error: err.message
+        });
+    }
+})
