@@ -3,6 +3,12 @@
     --bg: #f5f7fb;
     --panel: #ffffff;
     --muted: #6b7280;
+    overflow: hidden;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
 }
 
 body {
@@ -10,12 +16,18 @@ body {
     background: linear-gradient(180deg, #eef3ff 0%, #f8fafc 100%);
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
 }
 
 .app {
     max-width: 1000px;
-    margin: 28px auto;
+    margin: 0 auto;
     padding: 12px;
+    position: relative;
+    min-height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
 }
 
 .topbar {
@@ -36,11 +48,22 @@ body {
     padding: 6px 8px;
 }
 
+main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .main-panel {
-    background: var(--panel);
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-    padding: 12px;
+    background:var(--panel);
+    border-radius:8px;
+    box-shadow: 0 1px 3px rgba(15,23,42,0.06);
+    padding:12px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .toolbar {
@@ -68,13 +91,14 @@ body {
 }
 
 .editor-area {
-    min-height: 300px;
     margin-top: 10px;
     padding: 12px;
     border-radius: 6px;
     background: #fff;
     border: 1px solid #e6eef8;
     outline: none;
+    flex: 1 1 auto;
+    min-height: 0; 
 }
 
 .meta-row {
@@ -85,16 +109,62 @@ body {
     color: var(--muted);
 }
 
-.history {
-    margin-top: 12px;
-    max-height: 140px;
-    overflow: auto;
-    border-top: 1px dashed #eef2ff;
-    padding-top: 8px;
+.drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.25);
+  z-index: 80;
+  backdrop-filter: blur(1px);
+}
+
+.history-drawer {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 40px;
+  width: 360px;
+  max-width: 92vw;
+  background: var(--panel);
+  box-shadow: -8px 0 24px rgba(15,23,42,0.08);
+  transform: translateX(110%);
+  transition: transform 240ms ease;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #eef2ff;
+  padding: 12px;
+  height: 100%;
+}
+
+.history-drawer.open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid #f3f6fb;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.history-content {
+  overflow: auto;
+  padding-right: 8px;
 }
 
 .version-item {
-    font-size: 13px;
-    padding: 6px 0;
-    border-bottom: 1px solid #fbfdff;
+  font-size: 13px;
+  padding: 10px 0;
+  border-bottom: 1px solid #fbfdff;
+}
+
+.footer {
+  margin-top: 12px;
+  color: #94a3b8;
 }

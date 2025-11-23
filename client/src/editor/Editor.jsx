@@ -16,6 +16,8 @@ export default function Editor({ socket, userName, docId }) {
   const [versionNumber, setVersionNumber] = useState(0);
   const [status, setStatus] = useState('connecting');
 
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   useEffect(() => {
     if (!socket) return;
     socket.on('connect', () => setConnected(true));
@@ -136,6 +138,14 @@ export default function Editor({ socket, userName, docId }) {
     sendEdit();
   };
 
+  const toggleDrawer = () => {
+    setDrawerOpen(open => !open);
+  };
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+  };
+
   return (
     <div className="main-panel">
       <div className="toolbar">
@@ -156,6 +166,10 @@ export default function Editor({ socket, userName, docId }) {
           title="Font color"
           onChange={(e) => applyFormat('foreColor', e.target.value)}
         />
+
+        <button className="button" onClick={toggleDrawer} title="Toggle version history">
+          History
+        </button>
 
         <div style={{ marginLeft: 'auto', color: '#6b7280' }}>
           <small>v{versionNumber} — {status}</small>
@@ -182,15 +196,28 @@ export default function Editor({ socket, userName, docId }) {
         <div>{otherTyping ? <em>{otherTyping} is typing...</em> : <span>&nbsp;</span>}</div>
       </div>
 
-      <div className="history">
-        <h4>Version History</h4>
-        {versions.length === 0 ? <p>No versions yet</p> : versions.slice().reverse().map(v => (
-          <div key={v.versionNumber} className="version-item">
-            <strong>v{v.versionNumber}</strong> by <em>{v.author}</em> — <small style={{color:'#9aa4b2'}}>{new Date(v.timestamp).toLocaleString()}</small>
-            <div dangerouslySetInnerHTML={{ __html: v.content }} />
-          </div>
-        ))}
-      </div>
+      {drawerOpen && <div className="drawer-overlay" onClick={closeDrawer} />}
+
+      <aside className={`history-drawer ${drawerOpen ? 'open' : ''}`} aria-hidden={!drawerOpen}>
+        <div className="drawer-header">
+          <h3>Version History</h3>
+          <button onClick={closeDrawer} className="button">Close</button>
+        </div>
+
+        <div className="history-content">
+          {versions.length === 0 ? <p>No versions yet</p> : versions.slice().reverse().map(v => (
+            <div key={v.versionNumber} className="version-item">
+              <div style={{display:'flex', justifyContent:'space-between', gap:8}}>
+                <div>
+                  <strong>v{v.versionNumber}</strong> by <em>{v.author}</em>
+                </div>
+                <small style={{color:'#9aa4b2'}}>{new Date(v.timestamp).toLocaleString()}</small>
+              </div>
+              <div style={{marginTop:6}} dangerouslySetInnerHTML={{ __html: v.content }} />
+            </div>
+          ))}
+        </div>
+      </aside>
     </div>
   );
 }

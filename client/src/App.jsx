@@ -49,7 +49,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        <small>Made by a Nauman — Real-Time Document Collaboration.</small>
+        <small>Made by Nauman Shiraz — Real-Time Document Collaboration.</small>
       </footer>
     </div>
   );
