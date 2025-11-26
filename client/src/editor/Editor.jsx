@@ -1,11 +1,64 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { diff_match_patch } from 'diff-match-patch';
 
-function waitForIdle(fn, wait) {
+function debounce(fn, wait) {
   let t;
   return (...args) => {
     clearTimeout(t);
     t = setTimeout(() => fn(...args), wait);
   };
+}
+
+function saveSelection(containerEl) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const preSelectionRange = range.cloneRange();
+  preSelectionRange.selectNodeContents(containerEl);
+  preSelectionRange.setEnd(range.startContainer, range.startOffset);
+  const start = preSelectionRange.toString().length;
+
+  return {
+    start,
+    end: start + range.toString().length
+  };
+}
+
+function restoreSelection(containerEl, savedSel) {
+  if (!savedSel) return;
+  const charIndex = 0;
+  const range = document.createRange();
+  range.setStart(containerEl, 0);
+  range.collapse(true);
+  const nodeStack = [containerEl];
+  let node;
+  let foundStart = false;
+  let stop = false;
+  let charCount = 0;
+
+  while (!stop && (node = nodeStack.pop())) {
+    if (node.nodeType === 3) {
+      const nextCharCount = charCount + node.length;
+      if (!foundStart && savedSel.start >= charCount && savedSel.start <= nextCharCount) {
+        range.setStart(node, savedSel.start - charCount);
+        foundStart = true;
+      }
+      if (foundStart && savedSel.end >= charCount && savedSel.end <= nextCharCount) {
+        range.setEnd(node, savedSel.end - charCount);
+        stop = true;
+      }
+      charCount = nextCharCount;
+    } else {
+      let i = node.childNodes.length;
+      while (i--) {
+        nodeStack.push(node.childNodes[i]);
+      }
+    }
+  }
+
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 export default function Editor({ socket, userName, docId }) {
@@ -17,6 +70,8 @@ export default function Editor({ socket, userName, docId }) {
   const [status, setStatus] = useState('connecting');
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const lastSyncedRef = useRef({ content: '', version: 0 });
 
   useEffect(() => {
     if (!socket) return;
@@ -31,37 +86,31 @@ export default function Editor({ socket, userName, docId }) {
       if (editorRef.current) {
         editorRef.current.innerHTML = content || '';
       }
+      lastSyncedRef.current = { content: content || '', version: vnum || 0 };
       setStatus('Synced');
     });
 
-    socket.on('remote-edit', ({ content, user, versionNumber: vnum }) => {
+    socket.on('remote-merge', ({ content, author, versionNumber: vnum, lowConfidence }) => {
       if (editorRef.current) {
-        const isFocused = document.activeElement === editorRef.current;
-        const sel = window.getSelection();
-        let rangeBackup = null;
-        if (isFocused && sel.rangeCount > 0) {
-          rangeBackup = sel.getRangeAt(0).cloneRange();
-        }
-
+        const savedSel = saveSelection(editorRef.current);
         editorRef.current.innerHTML = content;
-
-        if (rangeBackup) {
-          try {
-            sel.removeAllRanges();
-            sel.addRange(rangeBackup);
-          } catch (e) {
-          }
-        }
+        restoreSelection(editorRef.current, savedSel);
       }
       setVersionNumber(vnum || versionNumber);
-      setStatus(`Updated by ${user || 'someone'}`);
+      setStatus(`Updated by ${author}`);
+      lastSyncedRef.current = { content, version: vnum };
+
       setVersions(prev => {
         const last = prev[prev.length - 1];
         if (!last || last.versionNumber !== vnum) {
-          return [...prev, { content, author: user, versionNumber: vnum, timestamp: new Date().toISOString() }];
+          return [...prev, { content, author, versionNumber: vnum, timestamp: new Date().toISOString() }];
         }
         return prev;
       });
+
+      if (lowConfidence) {
+        setStatus('Merged with low confidence — review content');
+      }
     });
 
     socket.on('typing', ({ user, isTyping }) => {
@@ -69,46 +118,78 @@ export default function Editor({ socket, userName, docId }) {
       setOtherTyping(isTyping ? user : null);
     });
 
-    socket.on('ack', ({ accepted, versionNumber: vnum }) => {
+    socket.on('ack', ({ accepted, versionNumber: vnum, lowConfidence, serverContent }) => {
       if (accepted) {
         setStatus('Saved');
         setVersionNumber(vnum);
+        if (serverContent) {
+          lastSyncedRef.current = { content: serverContent, version: vnum };
+          if (editorRef.current) {
+            const savedSel = saveSelection(editorRef.current);
+            editorRef.current.innerHTML = serverContent;
+            restoreSelection(editorRef.current, savedSel);
+          }
+        }
+        if (lowConfidence) {
+          setStatus('Saved (low confidence merge) — check document');
+        }
+      } else {
+        setStatus('Not saved: ' + (accepted === false && typeof accepted !== 'boolean' ? accepted : 'no'));
       }
     });
 
-    socket.on('conflict', ({ serverContent, versionNumber: vnum }) => {
-      if (editorRef.current) {
+    socket.on('conflict', ({ reason, serverContent, versionNumber: vnum, message }) => {
+      setStatus('Conflict: ' + (message || reason));
+      if (serverContent && editorRef.current) {
         editorRef.current.innerHTML = serverContent;
+        lastSyncedRef.current = { content: serverContent, version: vnum };
       }
-      setStatus('Conflict resolved by server (refreshed)');
-      setVersionNumber(vnum);
+    });
+
+    socket.on('room-full', (payload) => {
+      setStatus(payload?.message || 'Room is full');
     });
 
     return () => {
       socket.off('init');
-      socket.off('remote-edit');
+      socket.off('remote-merge');
       socket.off('typing');
       socket.off('ack');
       socket.off('conflict');
     };
   }, [socket, userName, docId]);
 
-  const sendTyping = waitForIdle((isTyping) => {
+  const sendTyping = debounce((isTyping) => {
     if (!socket) return;
     socket.emit('typing', { docId, user: userName, isTyping });
-  }, 300);
+  }, 250);
 
-  const sendEdit = waitForIdle(() => {
+  const sendPatch = debounce(() => {
     if (!socket || !editorRef.current) return;
-    const content = editorRef.current.innerHTML;
-    const payload = {
+
+    const dmp = new diff_match_patch();
+
+    const baseContent = lastSyncedRef.current.content || '';
+    const currentContent = editorRef.current.innerHTML || '';
+    const baseVersion = lastSyncedRef.current.version || 0;
+
+    if (currentContent === baseContent) {
+      return;
+    }
+
+    const diffs = dmp.diff_main(baseContent, currentContent);
+    dmp.diff_cleanupSemantic(diffs);
+    const patches = dmp.patch_make(baseContent, diffs);
+    const patchText = dmp.patch_toText(patches);
+
+    socket.emit('patch-edit', {
       docId,
-      content,
+      patchText,
       user: userName,
-      timestamp: new Date().toISOString(),
-      clientVersion: versionNumber
-    };
-    socket.emit('edit', payload);
+      baseVersion,
+      timestamp: new Date().toISOString()
+    });
+
     setStatus('Sending...');
   }, 450);
 
@@ -116,35 +197,35 @@ export default function Editor({ socket, userName, docId }) {
     const el = editorRef.current;
     if (!el) return;
 
-    const onInput = (e) => {
+    const onInput = () => {
       sendTyping(true);
-      sendEdit();
-      stopTyping();
+      sendPatch();
+      stopTypingDebounced();
     };
 
     el.addEventListener('input', onInput);
+    el.addEventListener('keydown', () => {
+      sendTyping(true);
+      stopTypingDebounced();
+    });
 
     return () => {
       el.removeEventListener('input', onInput);
+      el.removeEventListener('keydown', () => {});
     };
-  }, [editorRef.current, socket, versionNumber, userName]);
+  }, [editorRef.current, socket]);
 
-  const stopTyping = waitForIdle(() => {
+  const stopTypingDebounced = debounce(() => {
     sendTyping(false);
   }, 1200);
 
   const applyFormat = (cmd, value = null) => {
     document.execCommand(cmd, false, value);
-    sendEdit();
+    sendPatch();
   };
 
-  const toggleDrawer = () => {
-    setDrawerOpen(open => !open);
-  };
-
-  const closeDrawer = () => {
-    setDrawerOpen(false);
-  };
+  const toggleDrawer = () => setDrawerOpen(v => !v);
+  const closeDrawer = () => setDrawerOpen(false);
 
   return (
     <div className="main-panel">
@@ -167,8 +248,14 @@ export default function Editor({ socket, userName, docId }) {
           onChange={(e) => applyFormat('foreColor', e.target.value)}
         />
 
-        <button className="button" onClick={toggleDrawer} title="Toggle version history">
-          History
+        <button
+          className="button"
+          onClick={toggleDrawer}
+          aria-expanded={drawerOpen}
+          aria-controls="version-drawer"
+          title="Open version history"
+        >
+          Versions
         </button>
 
         <div style={{ marginLeft: 'auto', color: '#6b7280' }}>
@@ -185,7 +272,7 @@ export default function Editor({ socket, userName, docId }) {
         style={{ whiteSpace: 'pre-wrap' }}
         onFocus={() => {
           sendTyping(true);
-          stopTyping();
+          stopTypingDebounced();
         }}
         onBlur={() => {
           sendTyping(false);
@@ -196,24 +283,33 @@ export default function Editor({ socket, userName, docId }) {
         <div>{otherTyping ? <em>{otherTyping} is typing...</em> : <span>&nbsp;</span>}</div>
       </div>
 
-      {drawerOpen && <div className="drawer-overlay" onClick={closeDrawer} />}
+      <div
+        className={`drawer-backdrop ${drawerOpen ? 'open' : ''}`}
+        onClick={closeDrawer}
+        aria-hidden={!drawerOpen}
+      />
 
-      <aside className={`history-drawer ${drawerOpen ? 'open' : ''}`} aria-hidden={!drawerOpen}>
+      <aside
+        id="version-drawer"
+        className={`drawer ${drawerOpen ? 'open' : ''}`}
+        role="dialog"
+        aria-labelledby="version-drawer-title"
+        aria-hidden={!drawerOpen}
+      >
         <div className="drawer-header">
-          <h3>Version History</h3>
-          <button onClick={closeDrawer} className="button">Close</button>
+          <h3 id="version-drawer-title">Version History</h3>
+          <button className="button close-btn" onClick={closeDrawer} aria-label="Close versions">Close</button>
         </div>
 
-        <div className="history-content">
+        <div className="drawer-content">
           {versions.length === 0 ? <p>No versions yet</p> : versions.slice().reverse().map(v => (
             <div key={v.versionNumber} className="version-item">
-              <div style={{display:'flex', justifyContent:'space-between', gap:8}}>
-                <div>
-                  <strong>v{v.versionNumber}</strong> by <em>{v.author}</em>
-                </div>
-                <small style={{color:'#9aa4b2'}}>{new Date(v.timestamp).toLocaleString()}</small>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <strong>v{v.versionNumber}</strong>
+                <small style={{ color: '#9aa4b2' }}>{new Date(v.timestamp).toLocaleString()}</small>
               </div>
-              <div style={{marginTop:6}} dangerouslySetInnerHTML={{ __html: v.content }} />
+              <div style={{ marginBottom: 6, color: '#666' }}>by <em>{v.author}</em></div>
+              <div className="version-snippet" dangerouslySetInnerHTML={{ __html: v.content }} />
             </div>
           ))}
         </div>

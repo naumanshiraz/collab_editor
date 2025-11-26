@@ -11,10 +11,16 @@ export default function App() {
     const n = Math.floor(Math.random() * 900 + 100);
     return `User${n}`;
   });
+  const [roomError, setRoomError] = useState(null);
 
   useEffect(() => {
-    const s = io(SERVER_URL);
+    const s = io(SERVER_URL, { transports: ['websocket', 'polling'] });
     setSocket(s);
+
+    s.on('room-full', (payload) => {
+      setRoomError(payload?.message || 'Room is full');
+    });
+
     return () => {
       s.disconnect();
     };
@@ -37,7 +43,12 @@ export default function App() {
       </header>
 
       <main>
-        {socket ? (
+        {roomError ? (
+          <div style={{ padding: 20, background: '#fff5f5', borderRadius: 6 }}>
+            <strong>{roomError}</strong>
+            <p>Try again later or ask someone to leave the room.</p>
+          </div>
+        ) : socket ? (
           <Editor
             socket={socket}
             userName={userName}
