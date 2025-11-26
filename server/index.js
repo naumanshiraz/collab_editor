@@ -37,7 +37,7 @@ app.get('/doc/:docId', async (req, res) => {
   }
 });
 
-async function ensureDoc(docId = DOC_ID) {
+async function validateDocument(docId = DOC_ID) {
   let doc = await Document.findOne({ docId });
   if (!doc) {
     doc = new Document({
@@ -75,7 +75,7 @@ io.on('connection', (socket) => {
       socket.join(id);
       let doc = await Document.findOne({ docId: id });
       if (!doc) {
-        doc = await ensureDoc(id);
+        doc = await validateDocument(id);
       }
 
       socket.emit('init', {
@@ -102,7 +102,7 @@ io.on('connection', (socket) => {
       const id = payload.docId || DOC_ID;
       let doc = await Document.findOne({ docId: id });
       if (!doc) {
-        doc = await ensureDoc(id);
+        doc = await validateDocument(id);
       }
 
       const incomingPatchText = payload.patchText;
@@ -199,7 +199,7 @@ mongoose.connect(MONGO_URI, {
   useUnifiedTopology: true
 }).then(async () => {
   console.log('Connected to MongoDB');
-  await ensureDoc();
+  await validateDocument();
   server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
   });

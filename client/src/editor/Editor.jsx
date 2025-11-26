@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { diff_match_patch } from 'diff-match-patch';
 
-function debounce(fn, wait) {
+function delayFn(fn, wait) {
   let t;
   return (...args) => {
     clearTimeout(t);
@@ -159,12 +159,12 @@ export default function Editor({ socket, userName, docId }) {
     };
   }, [socket, userName, docId]);
 
-  const sendTyping = debounce((isTyping) => {
+  const sendTyping = delayFn((isTyping) => {
     if (!socket) return;
     socket.emit('typing', { docId, user: userName, isTyping });
   }, 250);
 
-  const sendPatch = debounce(() => {
+  const sendPatch = delayFn(() => {
     if (!socket || !editorRef.current) return;
 
     const dmp = new diff_match_patch();
@@ -200,13 +200,13 @@ export default function Editor({ socket, userName, docId }) {
     const onInput = () => {
       sendTyping(true);
       sendPatch();
-      stopTypingDebounced();
+      stopTyping();
     };
 
     el.addEventListener('input', onInput);
     el.addEventListener('keydown', () => {
       sendTyping(true);
-      stopTypingDebounced();
+      stopTyping();
     });
 
     return () => {
@@ -215,7 +215,7 @@ export default function Editor({ socket, userName, docId }) {
     };
   }, [editorRef.current, socket]);
 
-  const stopTypingDebounced = debounce(() => {
+  const stopTyping = delayFn(() => {
     sendTyping(false);
   }, 1200);
 
@@ -272,7 +272,7 @@ export default function Editor({ socket, userName, docId }) {
         style={{ whiteSpace: 'pre-wrap' }}
         onFocus={() => {
           sendTyping(true);
-          stopTypingDebounced();
+          stopTyping();
         }}
         onBlur={() => {
           sendTyping(false);
